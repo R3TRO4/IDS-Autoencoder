@@ -1,208 +1,7 @@
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
-import joblib
-import os
-
-# --- 1. FUNKCJE POMOCNICZE DO CZYSZCZENIA (ETAP 1) ---
-def clean_chunk(df):
-    """
-    Funkcja pomocnicza czyszcząca pojedynczy fragment danych.
-    """
-    print(f"\n[INFO] Rozmiar przed czyszczeniem: {df.shape}")
-
-    # ETAP 1: Usunięcie spacji z nazw kolumn.
-    df.columns = df.columns.str.strip()
-
-    # Etap 3: Obsługa NaN i Infinity
-    df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    df.dropna(inplace=True)
-
-    print(f"[INFO] Rozmiar po czyszczeniu: {df.shape}")
-    return df
-
-
-def preprocessing_data():
-    """
-    Główna funkcja orkiestrująca cały proces przygotowania danych (raw data).
-    ZWRACA: DataFrame z połączonymi danymi lub None w przypadku błędu.
-    """
-    print("Welcome to Autoencoder IDS Project - PREPROCESSING MODE")
-
-    data_dir = Path("CIC-IDS2017")
-    data_frames = []
-
-    print(f"[INFO] Szukam plików w: {data_dir.absolute()}")
-    csv_files = list(data_dir.glob('*.csv'))
-
-    if not csv_files:
-        print("BŁĄD: Nie znaleziono żadnych plików .csv!")
-        return None
-
-    for file_path in csv_files:
-        print(f"\n---> Przetwarzanie pliku: {file_path.name}")
-        try:
-            df_part = pd.read_csv(file_path)
-            df_part = clean_chunk(df_part)
-            data_frames.append(df_part)
-            del df_part
-        except Exception as e:
-            print(f"Błąd przy przetwarzaniu {file_path.name}: {e}")
-
-    if data_frames:
-        print("\n[INFO] Łączenie wszystkich plików w jeden zbiór danych...")
-        full_df = pd.concat(data_frames, ignore_index=True)
-
-        print("=== FINALNY ZBIÓR DANYCH (Skompilowany) ===")
-        print(f"Łączna liczba wierszy: {full_df.shape[0]}")
-
-        print("\n[INFO] Naprawianie nazw etykiet...")
-        full_df['Label'] = full_df['Label'].str.replace('�', '-', regex=False)
-        full_df['Label'] = full_df['Label'].str.replace('�', '-', regex=False)
-
-        return full_df
-    else:
-        print("Nie udało się utworzyć zbioru danych.")
-        return None
-
-
-def load_or_process_data(output_filename):
-    """
-    Funkcja zarządzająca cache'owaniem danych.
-    Sprawdza, czy istnieje gotowy plik. Jeśli tak - wczytuje go.
-    Jeśli nie - uruchamia preprocessing i zapisuje wynik.
-    """
-    output_path = Path(output_filename)
-
-    # Sprawdzamy:
-    # 1. Czy plik istnieje
-    # 2. Czy jego rozmiar jest większy od 0 bajtów
-    if output_path.exists() and output_path.stat().st_size > 0:
-        print(f"\n[INFO] Wykryto gotowy plik z danymi: {output_filename}")
-        choice = input("Czy chcesz skorzystać z danych z pliku? (t/n): ")
-        if (choice.lower() == 't'):
-            try:
-                print("[INFO] Pomijam preprocessing. Wczytuję dane z pliku...")
-                full_df = pd.read_csv(output_path)
-                print("[INFO] Dane wczytane pomyślnie!")
-                return full_df
-            except Exception as e:
-                print(f"[BŁĄD] Plik istnieje, ale nie udało się go wczytać: {e}")
-                # W razie błędu wczytywania, możemy spróbować przetworzyć dane od nowa
-                print("[INFO] Próba ponownego przetworzenia danych surowych...")
-        elif (choice.lower() != 't'):
-            # Uruchamiamy pełny preprocessing
-            print("[INFO] Rozpoczynam pełny preprocessing...")
-            full_df = preprocessing_data()
-            # Jeśli preprocessing się udał (dostaliśmy dane), zapisujemy je do pliku
-            if full_df is not None:
-                print(f"\n[INFO] Zapisywanie wyników do pliku: {output_filename}...")
-                full_df.to_csv(output_path, index=False)
-                print("[INFO] Zapis zakończony sukcesem.")
-                return full_df
-            else:
-                print("[BŁĄD] Preprocessing nie zwrócił danych. Plik nie został utworzony.")
-                return None
-
-
-# --- 2. PRZYGOTOWANIE POD TRENING (ETAP 2) ---
-def make_tensors_and_save(df):
-    """
-    Metoda przygotowuje dane w podziale na 3 zbiory:
-    1. TRENINGOWY (Czysty Benign) - do uczenia wag.
-    2. WALIDACYJNY (Czysty Benign) - do Early Stopping (zapobiega przeuczeniu)
-    3. TESTOWY (Mieszanka) - do finalnej oceny detekcji anomalii
-    """
-
-    print("\n[INFO] --- PRZYGOTOWANIE DANYCH (TRAIN / VAL / TEST) ---")
-    # Krok A: Przygotowanie kolumn
-    # Stworzenie kopii, aby nie psuć oryginału
-    df = df.copy()
-
-    # Tworzymy kolumnę pomocniczą (0 = Benign, 1 = Attack)
-    df['Label_Binary'] = df['Label'].apply(lambda x: 0 if x == 'BENIGN' else 1)
-
-    # Krok B: Rozdzielenie ruchu Normalnego od Ataków
-    print("[1/5] Separacja ruchu Normalnego i Ataków")
-    df_benign = df[df['Label_Binary'] == 0]
-    df_attack = df[df['Label_Binary'] == 1]
-
-    # Usuwamy erykiety z danych wejściowych (sieć ma widzieć tylko cechy sieciowe)
-    cols_to_drop = ['Label', 'Label_Binary']
-    X_benign = df_benign.drop(columns=cols_to_drop, errors='ignore')
-    X_attack = df_attack.drop(columns=cols_to_drop, errors='ignore')
-
-    # Krok C: Podział ruchu NORMALNEGO na 3 części
-    # Strategia: 70% Trening, 15% Walidacja, 15% Test
-    print("[2/5] Dzielenie ruchu normalnego na Train/Val/Test...")
-
-    # Najpierw wydzielam zbiór treningowy (70%) i resztę (30%)
-    X_train, X_temp = train_test_split(X_benign, test_size=0.30, random_state=42)
-
-    # Teraz dzielę resztę (30%) na pół -> 15% Walidacja, 15% Test
-    X_val, X_test_benign = train_test_split(X_temp, test_size=0.50, random_state=42)
-
-    print(f"      Rozmiar Train (Benign): {X_train.shape[0]} (do nauki)")
-    print(f"      Rozmiar Val   (Benign): {X_val.shape[0]}   (do kontroli)")
-    print(f"      Rozmiar Test  (Benign): {X_test_benign.shape[0]} (do weryfikacji FPR)")
-    print(f"      Rozmiar Attack (All):   {X_attack.shape[0]}   (do weryfikacji wykrywania)")
-
-    # Krok D: Normalizacja (MinMaxScaler)
-    print("[3/5] Skalowanie danych (MinMaxScaler)...")
-    scaler = MinMaxScaler()
-
-    # UWAGA: Skaler uczymy TYLKO na zbiorze treningowym!
-    # Walidacyjny i Testowy muszą być przeskalowane względem wiedzy ze zbioru treningowego.
-    X_train_scaled = scaler.fit_transform(X_train)
-
-    # Transformujemy resztę
-    X_val_scaled = scaler.transform(X_val)
-    X_test_benign_scaled = scaler.transform(X_test_benign)
-    X_attack_scaled = scaler.transform(X_attack)
-
-    # Krok E: Złożenie finalnego zbioru testowego
-    # Zbiór testowy zawiera: 15% czystego ruchu ORAZ wszystkie ataki
-    X_test_final = np.concatenate([X_test_benign_scaled, X_attack_scaled])
-
-    # Etykiety dla testu (0 = Benign, 1 = Attack) - potrzebne do wyliczenia skuteczności
-    y_test_benign = np.zeros(len(X_test_benign_scaled))
-    y_test_attack = np.ones(len(X_attack_scaled))
-    y_test_final = np.concatenate([y_test_benign, y_test_attack])
-
-    # Krok F: Zapis do plików
-    print("[4/5] Zapisywanie gotowych macierzy (.npy)...")
-
-    # 1. Zbiór Treningowy
-    np.save("data_train.npy", X_train_scaled)
-
-    # 2. Zbiór Walidacyjny
-    np.save("data_val.npy", X_val_scaled)
-
-    # 3. Zbiór Testowy (Cechy + Etykiety)
-    np.save("data_test.npy", X_test_final)
-    np.save("data_test_labels.npy", y_test_final)
-
-    # 4. Scaler
-    joblib.dump(scaler, "scaler_data.save")
-
-    print("\n[5/5] === SUKCES ===")
-    print(f"Pliki gotowe do użycia:")
-    print(f" -> data_train.npy (Benign): {X_train_scaled.shape}")
-    print(f" -> data_val.npy   (Benign): {X_val_scaled.shape}")
-    print(f" -> data_test.npy  (Mixed):  {X_test_final.shape}")
-    print(f" -> data_test_labels.npy:    {y_test_final.shape}")
-
-def display_summary(df):
-    """
-    Funkcja wyświetlająca podsumowanie wczytanego zbioru danych.
-    """
-    print("\n=== PODSUMOWANIE DANYCH ===")
-    print(f"Wymiary zbioru: {df.shape}")
-    print("Rozkład klas:")
-    print(df['Label'].value_counts())
-
+from preprocessing import *
+from train_model import *
+from evaluate_model import *
 
 def main():
     # Nazwa pliku, który może zawierać dane
@@ -216,7 +15,7 @@ def main():
         Path("data_test_labels.npy")
     ]
 
-    # Zmienna sterująca: czy mamy uruchomić przetwarzanie?
+    # Zmienna sterująca: czy mamy uruchomić preprocessing?
     should_process = False
 
     # 1. SPRAWDZENIE ISTNIENIA PLIKÓW TENSORÓW (.npy)
@@ -228,13 +27,13 @@ def main():
             should_process = True
         else:
             print("Pominięto tworzenie tensorów.")
-            pass  # Wyjście z funkcji main (i programu)
+            pass  # Wyjście z if'a
     else:
         # Jeśli plików brakuje, musimy przetwarzać
         print("\n[INFO] Brak kompletnych plików .npy. Rozpoczynam procedurę...")
         should_process = True
 
-    # 2. WYKONANIE LOGIKI (jeśli flaga should_process == True)
+    # 2. WYKONANIE PREPROCESSINGU (jeśli flaga should_process == True)
     if should_process:
         # Najpierw wczytujemy CSV (funkcja load_or_process_data sama zapyta o cache CSV)
         full_df = load_or_process_data(output_filename)
@@ -246,6 +45,100 @@ def main():
         else:
             print("Krytyczny błąd: Nie udało się załadować danych.")
 
+    # 3. ZBUDOWANIE I TRENING AUTOENCODERA
+    # Wczytanie danych
+    # X_train, X_val = load_train_data()
+    #
+    # if X_train is None or X_val is None:
+    #     return
+    #
+    # # Pobieramy liczbę cech (kolumn) dynamicznie z danych
+    # input_dim = X_train.shape[1]
+    #
+    # # Budowa modelu
+    # model = build_autoencoder(input_dim)
+    # model.summary() # Wyświetla tabelkę z architekturą w konsoli
+    #
+    # # Konfiguracja Callbacków (mechanizmów kontrolnych)
+    # callbacks = [
+    #     # EarlyStopping: Jeśli val_loss nie spadnie przez 5 epok, przewij uczenie.
+    #     # Ten machanizm zapobiega przeuczeniu (overfitting)
+    #
+    #     # ModelCheckpoint: Zapisuj model tylko wyedy, gdy jest najlepszy (najmniejszy błąd)
+    #     ModelCheckpoint('best_model.keras', monitor='val_loss', save_best_only=True, verbose=0)
+    # ]
+    #
+    # # Trenowanie modelu
+    # print("\n[INFO] Rozpoczęcie treningu sieci...")
+    # # UWAGA: W Autoencoderze X (wejście) jest równe Y (oczekiwane wyjście)!
+    # # Dkategi oidaheny x=X_train, y=X_train
+    # history = model.fit(
+    #     x=X_train,
+    #     y=X_train,
+    #     epochs=50,          # Maksymalna liczba epok (EarlyStopping i tak przerwie wcześniej)
+    #     batch_size=256,     # Ile próbek na raz mieli karta graficzna/CPU
+    #     shuffle=True,       # Mieszanie danych w każdej epoce
+    #     validation_data=(X_val, X_val), # Sprawdzanie jakości na zbiorze walidacyjnym
+    #     callbacks=callbacks
+    # )
+    #
+    # # Zapisz finalny model i wykres
+    # print("[INFO] Trening zakończony.")
+    # plot_history(history)
+    #
+    # # Model jest już zapisany przez Checkpoint jako 'best_model.keras'
+    # print("Najlepszy model zapisano jako: best_model.keras")
+
+
+    # 4. TESTOWANIE MODELU
+    # Załadowanie modelu
+    model_path = 'best_model.keras'
+    print("[INFO] Wczytanie modelu: {model_path}")
+    try:
+        model = load_model(model_path)
+    except:
+        print("BŁĄD: Nie znaleziono modelu 'best_model.keras'. Uruchom najpierw train_model.py!")
+        return
+
+    X_test, y_test = load_test_data()
+
+    # Obliczenie błędów
+    mse_errors = calculate_reconstruction_error(model, X_test)
+
+    # Wyznaczenie progu
+    # To jest serce Twojego problemu badawczego ("dobór progu błędu")
+    thresh_std, thresh_99 = find_threshold_statistics(mse_errors, y_test)
+
+    print(f"\nSugerowane progi:")
+    print(f" -> Metoda statystyczna (Mean + 3*Std): {thresh_std:.6f}")
+    print(f" -> Metoda percentylowa (99%):          {thresh_99:.6f}")
+
+    # WYBÓR PROGU DO OCENY (Możesz tu zmienić na thresh_std lub wpisać własną liczbę)
+    # FINAL_THRESHOLD = thresh_std
+    FINAL_THRESHOLD = thresh_99
+    print(f"\n[INFO] Przyjęty próg do klasyfikacji: {FINAL_THRESHOLD:.6f}")
+
+    # Klasyfikacja (0 = Benign, 1 = Atak)
+    # Jeśli błąd > próg -> Atak (1), w przeciwnym razie Normalny (0)
+    y_pred = (mse_errors > FINAL_THRESHOLD).astype(int)
+
+    # Raport wyników
+    print("\n=== RAPORT KLASYFIKACJI ===")
+    print(classification_report(y_test, y_pred, target_names=['Normalny', 'Atak']))
+
+    # Macierz pomyłek
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Normalny', 'Atak'],
+                yticklabels=['Normalny', 'Atak'])
+    plt.title('Macierz Pomyłek (Confusion Matrix)')
+    plt.ylabel('Prawdziwa etykieta')
+    plt.xlabel('Przewidziana etykieta')
+    plt.savefig("confusion_matrix.png")
+    plt.show()
+
+    # Wykres rozkładu błędów
+    plot_error_distribution(mse_errors, y_test, FINAL_THRESHOLD)
 
 if __name__ == '__main__':
     main()
