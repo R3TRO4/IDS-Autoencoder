@@ -16,7 +16,7 @@ def clean_chunk(df):
     # ETAP 1: Usunięcie spacji z nazw kolumn.
     df.columns = df.columns.str.strip()
 
-    # Etap 3: Obsługa NaN i Infinity
+    # Etap 2: Obsługa NaN i Infinity
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
     df.dropna(inplace=True)
 
@@ -26,10 +26,10 @@ def clean_chunk(df):
 
 def preprocessing_data():
     """
-    Główna funkcja orkiestrująca cały proces przygotowania danych (raw data).
+    Główna funkcja przeprowadzająca cały proces przygotowania danych (raw data).
     ZWRACA: DataFrame z połączonymi danymi lub None w przypadku błędu.
     """
-    print("Welcome to Autoencoder IDS Project - PREPROCESSING MODE")
+    print("Autoencoder IDS Project - PREPROCESSING MODE")
 
     data_dir = Path("CIC-IDS2017")
     data_frames = []

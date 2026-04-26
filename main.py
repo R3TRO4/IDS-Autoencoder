@@ -2,6 +2,7 @@ from pathlib import Path
 from preprocessing import *
 from train_model import *
 from evaluate_model import *
+import random
 
 def main():
     # Nazwa pliku, który może zawierać dane
@@ -47,47 +48,47 @@ def main():
 
     # 3. ZBUDOWANIE I TRENING AUTOENCODERA
     # Wczytanie danych
-    # X_train, X_val = load_train_data()
-    #
-    # if X_train is None or X_val is None:
-    #     return
-    #
-    # # Pobieramy liczbę cech (kolumn) dynamicznie z danych
-    # input_dim = X_train.shape[1]
-    #
-    # # Budowa modelu
-    # model = build_autoencoder(input_dim)
-    # model.summary() # Wyświetla tabelkę z architekturą w konsoli
-    #
-    # # Konfiguracja Callbacków (mechanizmów kontrolnych)
-    # callbacks = [
-    #     # EarlyStopping: Jeśli val_loss nie spadnie przez 5 epok, przewij uczenie.
-    #     # Ten machanizm zapobiega przeuczeniu (overfitting)
-    #
-    #     # ModelCheckpoint: Zapisuj model tylko wyedy, gdy jest najlepszy (najmniejszy błąd)
-    #     ModelCheckpoint('best_model.keras', monitor='val_loss', save_best_only=True, verbose=0)
-    # ]
-    #
-    # # Trenowanie modelu
-    # print("\n[INFO] Rozpoczęcie treningu sieci...")
-    # # UWAGA: W Autoencoderze X (wejście) jest równe Y (oczekiwane wyjście)!
-    # # Dkategi oidaheny x=X_train, y=X_train
-    # history = model.fit(
-    #     x=X_train,
-    #     y=X_train,
-    #     epochs=50,          # Maksymalna liczba epok (EarlyStopping i tak przerwie wcześniej)
-    #     batch_size=256,     # Ile próbek na raz mieli karta graficzna/CPU
-    #     shuffle=True,       # Mieszanie danych w każdej epoce
-    #     validation_data=(X_val, X_val), # Sprawdzanie jakości na zbiorze walidacyjnym
-    #     callbacks=callbacks
-    # )
-    #
-    # # Zapisz finalny model i wykres
-    # print("[INFO] Trening zakończony.")
-    # plot_history(history)
-    #
-    # # Model jest już zapisany przez Checkpoint jako 'best_model.keras'
-    # print("Najlepszy model zapisano jako: best_model.keras")
+    X_train, X_val = load_train_data()
+
+    if X_train is None or X_val is None:
+        return
+
+    # Pobieramy liczbę cech (kolumn) dynamicznie z danych
+    input_dim = X_train.shape[1]
+
+    # Budowa modelu
+    model = build_autoencoder(input_dim)
+    model.summary() # Wyświetla tabelkę z architekturą w konsoli
+
+    # Konfiguracja Callbacków (mechanizmów kontrolnych)
+    callbacks = [
+        # EarlyStopping: Jeśli val_loss nie spadnie przez 5 epok, przerwij uczenie.
+        # Ten machanizm zapobiega przeuczeniu (overfitting)
+        EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+        # ModelCheckpoint: Zapisuj model tylko wtedy, gdy jest najlepszy (najmniejszy błąd)
+        ModelCheckpoint('best_model.keras', monitor='val_loss', save_best_only=True, verbose=0)
+    ]
+
+    # Trenowanie modelu
+    print("\n[INFO] Rozpoczęcie treningu sieci...")
+    # UWAGA: W Autoencoderze X (wejście) jest równe Y (oczekiwane wyjście)!
+    # Dkategi oidaheny x=X_train, y=X_train
+    history = model.fit(
+        x=X_train,
+        y=X_train,
+        epochs=50,          # Maksymalna liczba epok (EarlyStopping i tak przerwie wcześniej)
+        batch_size=256,     # Ile próbek na raz mieli karta graficzna/CPU
+        shuffle=True,       # Mieszanie danych w każdej epoce
+        validation_data=(X_val, X_val), # Sprawdzanie jakości na zbiorze walidacyjnym
+        callbacks=callbacks
+    )
+
+    # Zapisz finalny model i wykres
+    print("[INFO] Trening zakończony.")
+    plot_history(history)
+
+    # Model jest już zapisany przez Checkpoint jako 'best_model.keras'
+    print("Najlepszy model zapisano jako: best_model.keras")
 
 
     # 4. TESTOWANIE MODELU
@@ -113,9 +114,25 @@ def main():
     print(f" -> Metoda statystyczna (Mean + 3*Std): {thresh_std:.6f}")
     print(f" -> Metoda percentylowa (99%):          {thresh_99:.6f}")
 
-    # WYBÓR PROGU DO OCENY (Możesz tu zmienić na thresh_std lub wpisać własną liczbę)
-    # FINAL_THRESHOLD = thresh_std
-    FINAL_THRESHOLD = thresh_99
+    # WYBÓR PROGU DO OCENY
+    choice_threshold = input("Jaki próg błędu? S - Statystyczna, P - Percentylowa: ").upper()
+
+    if choice_threshold == 'S':
+        FINAL_THRESHOLD = thresh_std
+        print(f"Wybrano: Metoda Statystyczna ({FINAL_THRESHOLD:.6f})")
+    elif choice_threshold == 'P':
+        FINAL_THRESHOLD = thresh_99
+        print(f"Wybrano: Metoda Percentylowa ({FINAL_THRESHOLD:.6f})")
+    else:
+        # Losowy wybór w przypadku błędnego wejścia
+        choices = [thresh_std, thresh_99]
+        names = ["Statystyczną", "Percentylową"]
+
+        idx = random.randint(0, 1)
+        FINAL_THRESHOLD = choices[idx]
+
+        print(f"Nieprawidłowy wybór! Wybrano metodę {names[idx]}: {FINAL_THRESHOLD:.6f}")
+
     print(f"\n[INFO] Przyjęty próg do klasyfikacji: {FINAL_THRESHOLD:.6f}")
 
     # Klasyfikacja (0 = Benign, 1 = Atak)
