@@ -18,7 +18,7 @@ def load_train_data():
 
     if not os.path.exists('data_train.npy'):
         print("[BŁĄD] Nie znaleziono pliku data_train.npy! Uruchom najpierw main.py")
-        return None, None, None
+        return None, None
 
     X_train = np.load('data_train.npy')
     X_val = np.load('data_val.npy')
@@ -43,7 +43,8 @@ def build_autoencoder(input_dim):
 
     # 2. ENCODER (Kompresja)
     # Zmniejszamy wymiarowość, szukając ukrytych wzorców
-    encoder = Dense(64, activation='relu')(input_layer)
+    encoder = Dense(128, activation='relu')(input_layer)
+    encoder = Dense(64, activation='relu')(encoder)
     encoder = Dense(32, activation='relu')(encoder)
 
     # 3. BOTTLENECK (Najwęższe gardło)
@@ -54,7 +55,7 @@ def build_autoencoder(input_dim):
     # Odbicie lustrzane Encodera - próba odtworzenia oryginału
     decoder = Dense(32, activation='relu')(bottleneck)
     decoder = Dense(64, activation='relu')(decoder)
-
+    decoder = Dense(128, activation='relu')(decoder)
     # 5. WARSTWA WYJŚCIOWA
     # Ważne: Aktywacja 'sigmoid', ponieważ nasze dane są znormalizowane do [0, 1]
     # Sigmoid zwraca wartości właśnie w tym przedziale.

@@ -108,54 +108,52 @@ def main():
 
     # Wyznaczenie progu
     # To jest serce Twojego problemu badawczego ("dobór progu błędu")
-    thresh_std, thresh_99 = find_threshold_statistics(mse_errors, y_test)
+    thresh_std, thresh_99, thresh_90, thresh_85 = find_threshold_statistics(mse_errors, y_test)
 
     print(f"\nSugerowane progi:")
     print(f" -> Metoda statystyczna (Mean + 3*Std): {thresh_std:.6f}")
     print(f" -> Metoda percentylowa (99%):          {thresh_99:.6f}")
+    print(f" -> Metoda percentylowa (90%):          {thresh_90:.6f}")
+    print(f" -> Metoda percentylowa (85%):          {thresh_85:.6f}")
 
-    # WYBÓR PROGU DO OCENY
-    choice_threshold = input("Jaki próg błędu? S - Statystyczna, P - Percentylowa: ").upper()
+    thresholds = {
+        "Statystyczny_3STD": thresh_std,
+        "Percentyl_99": thresh_99,
+        "Percentyl_90": thresh_90,
+        "Percentyl_85": thresh_85
+    }
 
-    if choice_threshold == 'S':
-        FINAL_THRESHOLD = thresh_std
-        print(f"Wybrano: Metoda Statystyczna ({FINAL_THRESHOLD:.6f})")
-    elif choice_threshold == 'P':
-        FINAL_THRESHOLD = thresh_99
-        print(f"Wybrano: Metoda Percentylowa ({FINAL_THRESHOLD:.6f})")
-    else:
-        # Losowy wybór w przypadku błędnego wejścia
-        choices = [thresh_std, thresh_99]
-        names = ["Statystyczną", "Percentylową"]
+    # 2. Pętla przechodząca przez każdy próg
+    for name, val in thresholds.items():
+        print(f"\n" + "=" * 30)
+        print(f"EWALUACJA DLA PROGU: {name}")
+        print(f"Wartość progu: {val:.6f}")
+        print("=" * 30)
 
-        idx = random.randint(0, 1)
-        FINAL_THRESHOLD = choices[idx]
+        # Klasyfikacja (0 = Benign, 1 = Atak)
+        # Jeśli błąd > próg -> Atak (1), w przeciwnym razie Normalny (0)
+        # Klasyfikacja binarna na podstawie aktualnego progu
+        y_pred_current = (mse_errors > val).astype(int)
 
-        print(f"Nieprawidłowy wybór! Wybrano metodę {names[idx]}: {FINAL_THRESHOLD:.6f}")
+        # Wyświetlenie raportu w konsoli
+        print(classification_report(y_test, y_pred_current, target_names=['Normalny', 'Atak']))
 
-    print(f"\n[INFO] Przyjęty próg do klasyfikacji: {FINAL_THRESHOLD:.6f}")
+        # Tworzenie Macierzy Pomyłek
+        cm = confusion_matrix(y_test, y_pred_current)
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=['Normalny', 'Atak'],
+                    yticklabels=['Normalny', 'Atak'])
+        plt.title(f'Macierz Pomyłek - {name}')
+        plt.ylabel('Prawdziwa etykieta')
+        plt.xlabel('Przewidziana etykieta')
 
-    # Klasyfikacja (0 = Benign, 1 = Atak)
-    # Jeśli błąd > próg -> Atak (1), w przeciwnym razie Normalny (0)
-    y_pred = (mse_errors > FINAL_THRESHOLD).astype(int)
+        # Zapisywanie z unikalną nazwą pliku
+        plt.savefig(f"confusion_matrix_{name}.png", bbox_inches='tight')
+        plt.show()
 
-    # Raport wyników
-    print("\n=== RAPORT KLASYFIKACJI ===")
-    print(classification_report(y_test, y_pred, target_names=['Normalny', 'Atak']))
-
-    # Macierz pomyłek
-    cm = confusion_matrix(y_test, y_pred)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Normalny', 'Atak'],
-                yticklabels=['Normalny', 'Atak'])
-    plt.title('Macierz Pomyłek (Confusion Matrix)')
-    plt.ylabel('Prawdziwa etykieta')
-    plt.xlabel('Przewidziana etykieta')
-    plt.savefig("confusion_matrix.png")
-    plt.show()
-
-    # Wykres rozkładu błędów
-    plot_error_distribution(mse_errors, y_test, FINAL_THRESHOLD)
+        # Wykres rozkładu (opcjonalnie, jeśli Twoja funkcja to obsługuje)
+        plot_error_distribution(mse_errors, y_test, val)
 
 if __name__ == '__main__':
     main()

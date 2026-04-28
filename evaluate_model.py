@@ -1,8 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
 import seaborn as sns
 
 def load_test_data():
@@ -45,7 +42,13 @@ def find_threshold_statistics(mse_errors, y_true):
     # Strategia 2: 99. percentyl (odcinamy 1% najtrudniejszych normalnych próbek)
     threshold_99 = np.percentile(normal_errors, 99)
 
-    return threshold_std, threshold_99
+    # Strategia 3: 90. percentyl (odcinamy 10% najtrudniejszych normalnych próbek)
+    threshold_90 = np.percentile(normal_errors, 90)
+
+    # Strategia 4: 85. percentyl (odcinamy 15% najtrudniejszych normalnych próbek)
+    threshold_85 = np.percentile(normal_errors, 85)
+
+    return threshold_std, threshold_99, threshold_90, threshold_85
 
 
 def plot_error_distribution(mse_errors, y_true, threshold):
