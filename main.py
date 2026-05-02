@@ -2,6 +2,7 @@ from pathlib import Path
 from preprocessing import *
 from train_model import *
 from evaluate_model import *
+from sklearn.metrics import classification_report, confusion_matrix
 import random
 
 def main():

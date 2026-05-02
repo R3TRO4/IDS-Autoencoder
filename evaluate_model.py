@@ -52,25 +52,38 @@ def find_threshold_statistics(mse_errors, y_true):
 
 
 def plot_error_distribution(mse_errors, y_true, threshold):
-    # Rysuje histogram błędów - kluczowy wykres do pracy mgr!
-    # Pokazuje, jak bardzo różnią się błędy dla ataków i ruchu normalnego.
+    # Rysuje histogram błędów - zoptymalizowany dla przejrzystości klas
     plt.figure(figsize=(12, 6))
 
-    # Rysujemy histogram dla ruchu normalnego
-    sns.histplot(mse_errors[y_true == 0], bins=50, kde=True, color='green', label='Ruch Normalny', alpha=0.6)
+    # Wyznaczamy limit osi X (robimy "zoom" na kluczowy obszar)
+    # Ignorujemy ekstremalne outliery, żeby zobaczyć separację.
+    # Wartość 'threshold * 10' zazwyczaj daje świetny widok,
+    # ale możesz ją dostosować ręcznie, np. przypisując max_x = 0.005
+    max_x = threshold * 15
 
-    # Rysujemy histogram dla ataków
-    sns.histplot(mse_errors[y_true == 1], bins=50, kde=True, color='red', label='Atak', alpha=0.6)
+    # Rysujemy histogramy (KDE=False naprawia problem osi Y)
+    # Zwiększamy 'bins' i ograniczamy je do naszego zakresu 'max_x'
+    sns.histplot(mse_errors[y_true == 0], bins=100, kde=False, color='green',
+                 label='Ruch Normalny', alpha=0.6, binrange=(0, max_x))
+
+    sns.histplot(mse_errors[y_true == 1], bins=100, kde=False, color='red',
+                 label='Atak', alpha=0.6, binrange=(0, max_x))
 
     # Rysujemy linię progu
-    plt.axvline(threshold, color='blue', linestyle='--', label=f'Próg odcięcia ({threshold:.4f})')
+    plt.axvline(threshold, color='blue', linestyle='--',
+                label=f'Próg odcięcia ({threshold:.4f})')
 
     plt.title('Rozkład błędu rekonstrukcji (Normal vs Atak)')
     plt.xlabel('Błąd rekonstrukcji (MSE)')
     plt.ylabel('Liczba próbek (Skala logarytmiczna)')
-    plt.yscale('log')  # Skala logarytmiczna, bo próbek benign jest dużo więcej
-    plt.legend()
 
-    plt.savefig("error_distribution.png")
-    print("[INFO] Zapisano wykres rozkładu błędów: error_distribution.png")
+    plt.yscale('log')
+    plt.xlim(0, max_x)  # Wymuszamy cięcie osi X
+
+    plt.legend()
+    plt.tight_layout()
+
+    # Zapis w wysokiej jakości (dpi=300) idealnej do pracy dyplomowej
+    plt.savefig("error_distribution.png", dpi=300)
+    print(f"[INFO] Zapisano wykres rozkładu błędów: error_distribution.png (Limit X: {max_x:.4f})")
     plt.show()
