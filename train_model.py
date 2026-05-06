@@ -30,7 +30,7 @@ def load_train_data():
 
     return X_train, X_val
 
-def build_autoencoder(input_dim):
+def build_autoencoder(input_dim, bottleneck_size):
     """
     Definiuje architekturę sieci neuronowej.
     Miejsce do eksperymentowania z liczbą warstw i neuronów.
@@ -38,24 +38,28 @@ def build_autoencoder(input_dim):
     :return: autoencoder (model)
     """
 
+    # KRYTYCZNE: Czyści pamięć (RAM/VRAM) z poprzedniego modelu w pętli!
+    # Bez tego po 3-4 iteracjach komputer wyrzuci błąd "Out of Memory".
+    tf.keras.backend.clear_session()
+
     # 1. WARSTWA WEJŚCIOWA
     input_layer = Input(shape=(input_dim,))
 
     # 2. ENCODER (Kompresja)
     # Zmniejszamy wymiarowość, szukając ukrytych wzorców
-    encoder = Dense(128, activation='relu')(input_layer)
-    encoder = Dense(64, activation='relu')(encoder)
+    #encoder = Dense(128, activation='relu')(input_layer)
+    encoder = Dense(64, activation='relu')(input_layer)
     encoder = Dense(32, activation='relu')(encoder)
 
     # 3. BOTTLENECK (Najwęższe gardło)
     # To tutaj dzieje się kompresja wiedzy o całym ruchu do zaledwie np. 16 liczb
-    bottleneck = Dense(16, activation='relu', name='bottleneck')(encoder)
+    bottleneck = Dense(bottleneck_size, activation='relu', name='bottleneck')(encoder)
 
     # 4. DECODER (Rekonstrukcja)
     # Odbicie lustrzane Encodera - próba odtworzenia oryginału
     decoder = Dense(32, activation='relu')(bottleneck)
     decoder = Dense(64, activation='relu')(decoder)
-    decoder = Dense(128, activation='relu')(decoder)
+    #decoder = Dense(128, activation='relu')(decoder)
     # 5. WARSTWA WYJŚCIOWA
     # Ważne: Aktywacja 'sigmoid', ponieważ nasze dane są znormalizowane do [0, 1]
     # Sigmoid zwraca wartości właśnie w tym przedziale.
