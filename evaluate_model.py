@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from setuptools.sandbox import save_path
 
 def load_test_data():
     print("[INFO] Wczytywanie danych testowych...")
@@ -51,18 +52,15 @@ def find_threshold_statistics(mse_errors, y_true):
     return threshold_std, threshold_99, threshold_90, threshold_85
 
 
-def plot_error_distribution(mse_errors, y_true, threshold):
+def plot_error_distribution(mse_errors, y_true, threshold, save_path=None):
     # Rysuje histogram błędów - zoptymalizowany dla przejrzystości klas
     plt.figure(figsize=(12, 6))
 
     # Wyznaczamy limit osi X (robimy "zoom" na kluczowy obszar)
     # Ignorujemy ekstremalne outliery, żeby zobaczyć separację.
-    # Wartość 'threshold * 10' zazwyczaj daje świetny widok,
-    # ale możesz ją dostosować ręcznie, np. przypisując max_x = 0.005
     max_x = threshold * 15
 
     # Rysujemy histogramy (KDE=False naprawia problem osi Y)
-    # Zwiększamy 'bins' i ograniczamy je do naszego zakresu 'max_x'
     sns.histplot(mse_errors[y_true == 0], bins=100, kde=False, color='green',
                  label='Ruch Normalny', alpha=0.6, binrange=(0, max_x))
 
@@ -83,7 +81,10 @@ def plot_error_distribution(mse_errors, y_true, threshold):
     plt.legend()
     plt.tight_layout()
 
-    # Zapis w wysokiej jakości (dpi=300) idealnej do pracy dyplomowej
-    plt.savefig("error_distribution.png", dpi=300)
-    print(f"[INFO] Zapisano wykres rozkładu błędów: error_distribution.png (Limit X: {max_x:.4f})")
-    plt.show()
+    # Zapis pod unikalną nazwą (jeśli została podana) w wysokiej jakości dpi=300
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"[INFO] Zapisano wykres rozkładu błędów: {save_path} (Limit X: {max_x:.4f})")
+        plt.close()  # Zamknij okienko w tle, żeby skrypt się nie zatrzymał
+    else:
+        plt.show()
