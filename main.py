@@ -2,7 +2,7 @@ from pathlib import Path
 from preprocessing import *
 from train_model import *
 from evaluate_model import *
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score  # DODANO: roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 import random
 import pandas as pd
 import numpy as np
@@ -72,7 +72,7 @@ def main():
     callbacks = [
         # EarlyStopping: Jeśli val_loss nie spadnie przez 5 epok, przerwij uczenie.
         # Ten machanizm zapobiega przeuczeniu (overfitting)
-        EarlyStopping(monitor='val_loss', patience=8, restore_best_weights=True),
+        EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
         # ModelCheckpoint: Zapisuj model tylko wtedy, gdy jest najlepszy (najmniejszy błąd)
         ModelCheckpoint('best_model_beyond_research.keras', monitor='val_loss', save_best_only=True, verbose=0)
     ]
@@ -84,7 +84,7 @@ def main():
     history = model.fit(
         x=X_train,
         y=X_train,
-        epochs=150,          # Maksymalna liczba epok (EarlyStopping i tak przerwie wcześniej)
+        epochs=50,          # Maksymalna liczba epok
         batch_size=256,     # Ile próbek na raz mieli karta graficzna/CPU
         shuffle=True,       # Mieszanie danych w każdej epoce
         validation_data=(X_val, X_val), # Sprawdzanie jakości na zbiorze walidacyjnym
